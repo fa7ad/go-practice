@@ -1,0 +1,46 @@
+services:
+  backend:
+    build:
+      context: backend
+      target: builder
+      args:
+        PORT: 3000
+    secrets:
+      - db-password
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mongo
+    restart: always
+    secrets:
+      - db-password
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/db-password
+    command: --quiet
+    healthcheck:
+      test: >
+        mongosh --quiet $$(hostname --ip-address || echo '127.0.0.1')"/test" --eval 'quit(db.runCommand({ ping: 1 }).ok ? 0 : 2)'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  proxy:
+    image: nginx
+    volumes:
+      - ./proxy/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+    ports:
+      - 80:80
+    depends_on:
+      - backend
+    environment:
+      BACKEND_PORT: 3000
+
+volumes:
+  db-data:
+
+secrets:
+  db-password:
+    file: db/password.txt
