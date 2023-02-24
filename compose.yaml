@@ -2,45 +2,53 @@ services:
   backend:
     build:
       context: backend
-      target: builder
+      target: dev-env
       args:
         PORT: 3000
-    secrets:
-      - db-password
-    depends_on:
-      db:
-        condition: service_healthy
-
-  db:
-    image: mongo
-    restart: always
-    secrets:
-      - db-password
+    volumes:
+      - db_data:/data
+      - mod_cache:/go/pkg/mod
+      - build_cache:/go-build
+      - ./backend:/code
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/db-password
-    command: --quiet
+      DB_PATH: /data/base.db
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.go.rule=PathPrefix(`/`)"
+      - "traefik.http.services.go.loadbalancer.server.port=3000"
     healthcheck:
-      test: >
-        mongosh --quiet $$(hostname --ip-address || echo '127.0.0.1')"/test" --eval 'quit(db.runCommand({ ping: 1 }).ok ? 0 : 2)'
+      test: [ "CMD", "curl", "-f", "http://localhost:3000" ]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 40s
 
   proxy:
-    image: nginx
-    volumes:
-      - ./proxy/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+    image: traefik
+    command: --providers.docker --entrypoints.web.address=:80 --providers.docker.exposedbydefault=false
     ports:
-      - 80:80
+      - "8000:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
-      - backend
-    environment:
-      BACKEND_PORT: 3000
+      backend:
+        condition: service_healthy
+
+  post_proxy:
+    image: alpine
+    restart: "no"
+    command: >
+      echo "\
+        ┌───────────────────────────────────────────────────┐ \
+        │                      Traefik                      │ \
+        │               http://127.0.0.1:8000               │ \
+        └───────────────────────────────────────────────────┘"
+    depends_on:
+      proxy:
+        condition: service_started
+
 
 volumes:
-  db-data:
-
-secrets:
-  db-password:
-    file: db/password.txt
+  db_data: { }
+  mod_cache: { }
+  build_cache: { }

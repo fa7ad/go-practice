@@ -1,78 +1,112 @@
 package book
 
 import (
-	"context"
+	"fmt"
 	"go-practice/api/presenter"
 	"go-practice/pkg/entities"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"time"
+	"gorm.io/gorm"
 )
 
-// Repository interface allows us to access the CRUD Operations in mongo here.
+// Repository interface allows us to access the CRUD Operations in db.
 type Repository interface {
 	CreateBook(book *entities.Book) (*entities.Book, error)
 	ReadBook() (*[]presenter.Book, error)
-	UpdateBook(book *entities.Book) (*entities.Book, error)
-	DeleteBook(ID string) error
+	UpdateBook(ID uint, book *entities.Book) (*entities.Book, error)
+	DeleteBook(ID uint) error
+	HandleError(res *gorm.DB) error
+
+	AutoMigrate() error
 }
+
+type AutoMigrate func() error
+
 type repository struct {
-	Collection *mongo.Collection
+	DB *gorm.DB
 }
 
 // NewRepo is the single instance repo that is being created.
-func NewRepo(collection *mongo.Collection) Repository {
-	return &repository{
-		Collection: collection,
-	}
+func NewRepo(db *gorm.DB) Repository {
+	return &repository{db}
 }
 
-// CreateBook is a mongo repository that helps to create books
+func (r *repository) AutoMigrate() error {
+	return r.DB.AutoMigrate(&entities.Book{})
+}
+
+// CreateBook is a function that helps to create books
 func (r *repository) CreateBook(book *entities.Book) (*entities.Book, error) {
-	book.ID = primitive.NewObjectID()
-	book.CreatedAt = time.Now()
-	book.UpdatedAt = time.Now()
-	_, err := r.Collection.InsertOne(context.Background(), book)
-	if err != nil {
-		return nil, err
-	}
-	return book, nil
+	res := r.DB.Create(&book)
+	err := r.HandleError(res)
+	return book, err
 }
 
-// ReadBook is a mongo repository that helps to fetch books
+// ReadBook is a function that helps to fetch books
 func (r *repository) ReadBook() (*[]presenter.Book, error) {
+	var bookEntities []entities.Book
 	var books []presenter.Book
-	cursor, err := r.Collection.Find(context.Background(), bson.D{})
-	if err != nil {
-		return nil, err
-	}
-	for cursor.Next(context.TODO()) {
-		var book presenter.Book
-		_ = cursor.Decode(&book)
+	res := r.DB.Find(&bookEntities)
+
+	for _, entity := range bookEntities {
+		book := presenter.Book{
+			ID:     entity.ID,
+			Title:  entity.Title,
+			Author: entity.Author,
+		}
 		books = append(books, book)
 	}
+
+	err := r.HandleError(res)
+	if err != nil {
+		return nil, err
+	}
+
 	return &books, nil
 }
 
-// UpdateBook is a mongo repository that helps to update books
-func (r *repository) UpdateBook(book *entities.Book) (*entities.Book, error) {
-	book.UpdatedAt = time.Now()
-	_, err := r.Collection.UpdateOne(context.Background(), bson.M{"_id": book.ID}, bson.M{"$set": book})
+// UpdateBook is a function that helps to update books
+func (r *repository) UpdateBook(ID uint, book *entities.Book) (*entities.Book, error) {
+	var existingBook entities.Book
+	findRes := r.DB.Find(&existingBook, ID)
+	err := r.HandleError(findRes)
+
 	if err != nil {
 		return nil, err
 	}
-	return book, nil
+
+	res := r.DB.Model(&existingBook).Updates(book)
+
+	err = r.HandleError(res)
+	if err != nil {
+		return nil, err
+	}
+
+	return &existingBook, nil
 }
 
-// DeleteBook is a mongo repository that helps to delete books
-func (r *repository) DeleteBook(ID string) error {
-	bookID, err := primitive.ObjectIDFromHex(ID)
+// DeleteBook is a function that helps to delete books
+func (r *repository) DeleteBook(ID uint) error {
+	var book entities.Book
+
+	findResponse := r.DB.Find(&book, ID)
+	err := r.HandleError(findResponse)
+
 	if err != nil {
 		return err
 	}
-	_, err = r.Collection.DeleteOne(context.Background(), bson.M{"_id": bookID})
+
+	deleteResponse := r.DB.Delete(&book)
+	err = r.HandleError(deleteResponse)
+
 	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// HandleError is a function for dealing with error responses from DB
+func (r *repository) HandleError(res *gorm.DB) error {
+	if res.Error != nil && res.Error != gorm.ErrRecordNotFound {
+		err := fmt.Errorf("Error: %w", res.Error)
 		return err
 	}
 	return nil

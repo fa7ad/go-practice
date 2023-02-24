@@ -41,7 +41,14 @@ func UpdateBook(service book.Service) fiber.Handler {
 			c.Status(http.StatusBadRequest)
 			return c.JSON(presenter.BookErrorResponse(err))
 		}
-		result, err := service.UpdateBook(&requestBody)
+
+		id, err := c.ParamsInt("id")
+		if err != nil || id == 0 {
+			c.Status(http.StatusBadRequest)
+			return c.JSON(presenter.BookErrorResponse(err))
+		}
+
+		result, err := service.UpdateBook(uint(id), &requestBody)
 		if err != nil {
 			c.Status(http.StatusInternalServerError)
 			return c.JSON(presenter.BookErrorResponse(err))
@@ -53,14 +60,12 @@ func UpdateBook(service book.Service) fiber.Handler {
 // RemoveBook is handler/controller which removes Books from the BookShop
 func RemoveBook(service book.Service) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		var requestBody entities.DeleteRequest
-		err := c.BodyParser(&requestBody)
-		if err != nil {
+		bookID, err := c.ParamsInt("id")
+		if err != nil || bookID == 0 {
 			c.Status(http.StatusBadRequest)
 			return c.JSON(presenter.BookErrorResponse(err))
 		}
-		bookID := requestBody.ID
-		err = service.RemoveBook(bookID)
+		err = service.RemoveBook(uint(bookID))
 		if err != nil {
 			c.Status(http.StatusInternalServerError)
 			return c.JSON(presenter.BookErrorResponse(err))

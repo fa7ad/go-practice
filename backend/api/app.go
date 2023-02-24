@@ -3,17 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/gofiber/fiber/v2"
-	"go-practice/api/routes"
-	"go-practice/pkg/book"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
-	"net/url"
 	"os"
 	"time"
 
+	"go-practice/api/routes"
+	"go-practice/pkg/book"
+
+	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
 )
 
 func main() {
@@ -22,8 +23,13 @@ func main() {
 		log.Fatal("Database Connection Error $s", err)
 	}
 	fmt.Println("Database connection success!")
-	bookCollection := db.Collection("books")
-	bookRepo := book.NewRepo(bookCollection)
+
+	bookRepo := book.NewRepo(db)
+	migrationError := bookRepo.AutoMigrate()
+	if migrationError != nil {
+		cancel()
+		log.Fatal("Migration Failed, Error: $s", migrationError)
+	}
 	bookService := book.NewService(bookRepo)
 
 	app := fiber.New()
@@ -40,28 +46,16 @@ func main() {
 	log.Fatal(app.Listen(listenUri))
 }
 
-func databaseConnection() (*mongo.Database, context.CancelFunc, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func databaseConnection() (*gorm.DB, context.CancelFunc, error) {
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
-	bin, passErr := os.ReadFile("/run/secrets/db-password")
-	if passErr != nil {
-		cancel()
-		return nil, nil, passErr
-	}
+	dbPath := os.Getenv("DB_PATH")
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 
-	rawUser := os.Getenv("DB_USERNAME")
-	rawPass := string(bin)
-
-	user := url.QueryEscape(rawUser)
-	pass := url.QueryEscape(rawPass)
-
-	connectionUri := fmt.Sprintf("mongodb://%s:%s@db:27017/fiber", user, pass)
-
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(connectionUri).SetServerSelectionTimeout(5*time.Second))
 	if err != nil {
 		cancel()
 		return nil, nil, err
 	}
-	db := client.Database("books")
+
 	return db, cancel, nil
 }

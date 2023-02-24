@@ -3,14 +3,13 @@ package presenter
 import (
 	"github.com/gofiber/fiber/v2"
 	"go-practice/pkg/entities"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // Book is the presenter object which will be passed in the response by Handler
 type Book struct {
-	ID     primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	Title  string             `json:"title"`
-	Author string             `json:"author"`
+	ID     uint   `json:"id"`
+	Title  string `json:"title"`
+	Author string `json:"author"`
 }
 
 // BookSuccessResponse is the singular SuccessResponse that will be passed in the response by
@@ -22,26 +21,26 @@ func BookSuccessResponse(data *entities.Book) *fiber.Map {
 		Author: data.Author,
 	}
 	return &fiber.Map{
-		"status": true,
-		"data":   book,
-		"error":  nil,
+		"success": true,
+		"data":    book,
+		"error":   nil,
 	}
 }
 
 // BooksSuccessResponse is the list SuccessResponse that will be passed in the response by Handler
 func BooksSuccessResponse(data *[]Book) *fiber.Map {
 	return &fiber.Map{
-		"status": true,
-		"data":   data,
-		"error":  nil,
+		"success": true,
+		"data":    data,
+		"error":   nil,
 	}
 }
 
 // BookErrorResponse is the ErrorResponse that will be passed in the response by Handler
 func BookErrorResponse(err error) *fiber.Map {
 	return &fiber.Map{
-		"status": false,
-		"data":   "",
-		"error":  err.Error(),
+		"success": false,
+		"data":    "",
+		"error":   err.Error(),
 	}
 }

@@ -9,8 +9,8 @@ import (
 type Service interface {
 	InsertBook(book *entities.Book) (*entities.Book, error)
 	FetchBooks() (*[]presenter.Book, error)
-	UpdateBook(book *entities.Book) (*entities.Book, error)
-	RemoveBook(ID string) error
+	UpdateBook(ID uint, book *entities.Book) (*entities.Book, error)
+	RemoveBook(ID uint) error
 }
 
 type service struct {
@@ -35,11 +35,11 @@ func (s *service) FetchBooks() (*[]presenter.Book, error) {
 }
 
 // UpdateBook is a service layer that helps update books in BookShop
-func (s *service) UpdateBook(book *entities.Book) (*entities.Book, error) {
-	return s.repository.UpdateBook(book)
+func (s *service) UpdateBook(ID uint, book *entities.Book) (*entities.Book, error) {
+	return s.repository.UpdateBook(ID, book)
 }
 
 // RemoveBook is a service layer that helps remove books from BookShop
-func (s *service) RemoveBook(ID string) error {
+func (s *service) RemoveBook(ID uint) error {
 	return s.repository.DeleteBook(ID)
 }

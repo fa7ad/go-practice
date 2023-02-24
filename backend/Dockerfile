@@ -1,5 +1,6 @@
-# syntax=docker/dockerfile:1.4
-FROM --platform=$BUILDPLATFORM golang:1.20-alpine AS builder
+FROM golang:1.20-alpine AS builder
+
+RUN apk add --no-cache --update curl
 
 WORKDIR /code
 
@@ -9,38 +10,30 @@ ENV GOCACHE /go-build
 
 ARG PORT=3000
 ENV PORT $PORT
-ARG DB_USERNAME=root
-ENV DB_USERNAME $DB_USERNAME
 
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod/cache \
-    go mod download
+RUN go mod download
 
 COPY . .
 
-RUN --mount=type=cache,target=/go/pkg/mod/cache \
-    --mount=type=cache,target=/go-build \
-    go build -C api -o ../bin/backend app.go
+RUN go build -o ./bin/backend api/app.go
+
+RUN touch $$DB_PATH
 
 CMD ["/code/bin/backend"]
 
-FROM builder as dev-envs
+FROM builder as dev-env
 
-RUN <<EOF
-apk update
-apk add git
-EOF
+RUN sh -c "apk add git; \
+go install github.com/cosmtrek/air@latest"
 
-RUN <<EOF
-addgroup -S docker
-adduser -S --shell /bin/bash --ingroup docker vscode
-EOF
+CMD ["air"]
 
-# install Docker tools (cli, buildx, compose)
-COPY --from=gloursdocker/docker / /
+FROM builder as prod-env
 
-CMD ["go", "run", "-C", "api", "app.go"]
+RUN apk add --no-cache tini
 
-FROM scratch
-COPY --from=builder /code/bin/backend /usr/local/bin/backend
+COPY /code/bin/backend /usr/local/bin/backend
+
 CMD ["/usr/local/bin/backend"]
+ENTRYPOINT ["/sbin/tini", "-"]
